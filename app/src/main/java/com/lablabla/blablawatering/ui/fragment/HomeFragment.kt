@@ -2,57 +2,50 @@ package com.lablabla.blablawatering.ui.fragment
 
 import android.Manifest
 import android.app.Activity
-import android.bluetooth.*
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
-import android.content.Context
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.os.*
+import android.os.Bundle
 import android.util.Log
 import android.view.View
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.lablabla.blablawatering.R
+import com.lablabla.blablawatering.bluetooth.BlablaBTCallback
 import com.lablabla.blablawatering.databinding.FragmentHomeBinding
-import com.lablabla.blablawatering.util.isReadable
-import com.lablabla.blablawatering.util.toHexString
+import com.lablabla.blablawatering.model.Station
+import com.lablabla.blablawatering.ui.adapter.StationsAdapter
+import com.lablabla.blablawatering.util.navigateSafe
 import dagger.hilt.android.AndroidEntryPoint
-import java.util.*
+import javax.inject.Inject
 
-private const val GATT_MAX_MTU_SIZE = 517
-
-private const val ADVERTISING_UUID = "0000abcd-0000-1000-8000-00805f9b34fb"
-
-private const val SERVICE_UUID = "260bb0ea-6e32-4f94-adf6-b96ebda4c6ce"
-private const val GET_STATIONS_UUID = "1001b0ea-6e32-4f94-adf6-b96ebda4c6ce"
-private const val REQUEST_ENABLE_BT = 1
 
 @AndroidEntryPoint
-class HomeFragment : Fragment(R.layout.fragment_home) {
+class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
 
     private val TAG = "HomeFragment"
     private lateinit var binding: FragmentHomeBinding
+    private lateinit var stationsAdapter: StationsAdapter
 
-    private var scanning = false
-    private var bluetoothGatt: BluetoothGatt? = null
+    @Inject
+    lateinit var btManager: com.lablabla.blablawatering.bluetooth.BluetoothManager
 
-    private val bluetoothAdapter: BluetoothAdapter by lazy {
-        val bluetoothManager = getSystemService(activity!!, BluetoothManager::class.java) as BluetoothManager
+    val bluetoothAdapter: BluetoothAdapter by lazy {
+        val bluetoothManager = getSystemService(
+            requireActivity(),
+            BluetoothManager::class.java
+        ) as BluetoothManager
         when {
             ContextCompat.checkSelfPermission(
-                activity!!,
+                requireActivity(),
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED -> {
-                startScanLeDevice()
             }
 //            shouldShowRequestPermissionRationale(...) -> {
 //            // In an educational UI, explain to the user why your app requires this
@@ -71,43 +64,12 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         bluetoothManager.adapter
     }
 
-    //region BLE Scanning
-    private val bleScanner by lazy {
-        bluetoothAdapter.bluetoothLeScanner
-    }
-
-    private val scanFilter = ScanFilter.Builder()
-        .setServiceUuid(ParcelUuid(UUID.fromString(ADVERTISING_UUID)))
-        .build()
-
-    private val scanSettings: ScanSettings
-        get() {
-            return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                scanSettingsSinceM
-            } else {
-                scanSettingsBeforeM
-            }
-        }
-
-    private val scanSettingsBeforeM = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setReportDelay(0)
-        .build()
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    private val scanSettingsSinceM = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
-        .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-        .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
-        .setReportDelay(0)
-        .build()
-
     private var activityResultLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result: ActivityResult ->
         if (result.resultCode == Activity.RESULT_OK) {
             Log.e(TAG, "On Activity Result OK")
+            // TODO: Check if it's ACTION_REQUEST_ENABLE and if so, update own BT manager
         }
     }
 
@@ -116,7 +78,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
             if (isGranted) {
-                startScanLeDevice()
+                btManager.startScan()
             } else {
                 // Explain to the user that the feature is unavailable because the
                 // features requires a permission that the user has denied. At the
@@ -129,158 +91,97 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        btManager.btCallback = this
         if (!bluetoothAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             activityResultLauncher.launch(enableBtIntent);
         }
-        listenToBondStateChanges()
+        else
+        {
+            btManager.bluetoothAdapter = bluetoothAdapter
+        }
+    }
+
+    private fun showProgressIndicator() {
+        if(this::binding.isInitialized) {
+            activity?.runOnUiThread {
+                binding.progressIndicator.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun hideProgressIndicator() {
+        if(this::binding.isInitialized) {
+            activity?.runOnUiThread {
+                binding.progressIndicator.visibility = View.INVISIBLE
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding = FragmentHomeBinding.bind(view)
-        startScanLeDevice()
-    }
+        showProgressIndicator()
+        setupRecyclerView()
 
-    private fun startScanLeDevice() {
-        if (!scanning) {
-            scanning = true
-            bleScanner.startScan(mutableListOf(scanFilter), scanSettings, leScanCallback)
-        }
-    }
-
-    private fun stopScanLeDevice() {
-        if (scanning) {
-            scanning = false
-            bleScanner.stopScan(leScanCallback)
-        }
-    }
-
-    // Device scan callback.
-    private val leScanCallback: ScanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            super.onScanResult(callbackType, result)
-
-            val name: String? = result.scanRecord?.deviceName ?: result.device.name
-            Log.e(TAG, "Scanning BLE devices found device named ${name}")
-            stopScanLeDevice()
-            with(result.device) {
-                Log.w(TAG, "Connecting to $address")
-                connectGatt(context, false, gattCallback)
-            }
+        updateUIDevice(false)
+        binding.syncButton.setOnClickListener {
+            btManager.sync()
         }
 
-        override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-            super.onBatchScanResults(results)
+        if (btManager.connected) {
+            updateUIDevice(true, btManager.getDeviceName(), btManager.getDeviceAddress())
+            btManager.sync()
+        }
+        else {
+            btManager.startScan()
         }
 
-        override fun onScanFailed(errorCode: Int) {
-            super.onScanFailed(errorCode)
-            Log.e(TAG, "Scanning BLE devices failed with error code ${errorCode}")
-            stopScanLeDevice()
-        }
-    }
-
-    private val gattCallback: BluetoothGattCallback  = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            val deviceAddress = gatt.device.address
-
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    Log.w("BluetoothGattCallback", "Successfully connected to $deviceAddress")
-                    bluetoothGatt = gatt
-                    Handler(Looper.getMainLooper()).post {
-                        bluetoothGatt?.discoverServices()
-                    }
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    Log.w("BluetoothGattCallback", "Successfully disconnected from $deviceAddress")
-                    gatt.close()
-                }
-            } else {
-                Log.w("BluetoothGattCallback", "Error $status encountered for $deviceAddress! Disconnecting...")
-                gatt.close()
-            }
-        }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            with(gatt) {
-                Log.w("BluetoothGattCallback", "Discovered ${services.size} services for ${device.address}")
-                requestMtu(GATT_MAX_MTU_SIZE)
-
-                if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                    device.createBond()
-                }
-                else {
-//                    getStations()
-                }
-            }
-        }
-
-        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
-            Log.w("BluetoothGattCallback", "ATT MTU changed to $mtu, success: ${status == BluetoothGatt.GATT_SUCCESS}")
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
-            with(characteristic) {
-                when (status) {
-                    BluetoothGatt.GATT_SUCCESS -> {
-                        Log.i("BluetoothGattCallback", "Read characteristic $uuid:\n${value.decodeToString()}")
-                    }
-                    BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
-                        Log.e("BluetoothGattCallback", "Read not permitted for $uuid!")
-                    }
-                    else -> {
-                        Log.e("BluetoothGattCallback", "Characteristic read failed for $uuid, error: $status")
-                    }
-                }
-            }
-        }
-    }
-
-    fun listenToBondStateChanges() {
-        activity?.applicationContext?.registerReceiver(
-            broadcastReceiver,
-            IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        // Debug: TOOO: Remove
+        val stations = listOf(
+            Station(0, 0, false, "Test Station 1"),
+            Station(1, 1, true, "Test Station 2"),
         )
+        onUpdateStations(stations)
     }
 
-    private val broadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            with(intent) {
-                if (action == BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
-                    val device = getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                    val previousBondState = getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
-                    val bondState = getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1)
-                    val bondTransition = "${previousBondState.toBondStateDescription()} to " +
-                            bondState.toBondStateDescription()
-                    Log.w("Bond state change", "${device?.address} bond state changed | $bondTransition")
-                    if (bondState == BluetoothDevice.BOND_BONDED) {
-                        getStations()
-                    }
-                }
+    private fun setupRecyclerView() {
+        stationsAdapter = StationsAdapter()
+        binding.stationsRecyclerView.apply {
+            adapter = stationsAdapter
+            layoutManager = LinearLayoutManager(activity)
+        }
+    }
 
+    private fun updateUIDevice(connected: Boolean, name: String? = null, address: String? = null) {
+        activity?.runOnUiThread {
+            binding.syncButton.isEnabled = connected
+            binding.deviceNameTV.isEnabled = connected
+            name?.let {
+                binding.deviceNameTV.text = it
+            }
+            binding.deviceAddrTV.isEnabled = connected
+            address?.let {
+                binding.deviceAddrTV.text = it
             }
         }
+    }
 
-        private fun Int.toBondStateDescription() = when(this) {
-            BluetoothDevice.BOND_BONDED -> "BONDED"
-            BluetoothDevice.BOND_BONDING -> "BONDING"
-            BluetoothDevice.BOND_NONE -> "NOT BONDED"
-            else -> "ERROR: $this"
+    override fun onUpdateStations(stations: List<Station>) {
+        hideProgressIndicator()
+        Log.d(TAG, "Updating to ${stations.size} stations")
+        activity?.runOnUiThread {
+            stationsAdapter.differ.submitList(stations)
         }
     }
 
-    private fun getStations() {
-        val serviceUuid = UUID.fromString(SERVICE_UUID)
-        val getStationsCharUuid = UUID.fromString(GET_STATIONS_UUID)
-        val getStationsChar = bluetoothGatt
-            ?.getService(serviceUuid)?.getCharacteristic(getStationsCharUuid)
-        if (getStationsChar?.isReadable() == true) {
-            bluetoothGatt?.readCharacteristic(getStationsChar)
-        }
+    override fun onDeviceConnected(name: String, address: String) {
+        Log.d(TAG, "Connected to device $name at $address")
+        updateUIDevice(true, name, address)
+    }
+
+    override fun onDeviceDisconnected(name: String, address: String) {
+        Log.d(TAG, "Disconnected from device $name at $address")
+        updateUIDevice(false)
     }
 }

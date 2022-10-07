@@ -4,7 +4,7 @@
         android:title="@string/home"
         android:icon="@drawable/ic_home"/>
 
-    <item android:id="@+id/settingsFragment"
-        android:title="@string/settings"
+    <item android:id="@+id/eventsFragment"
+        android:title="@string/events"
         android:icon="@drawable/ic_settings"/>
 </menu>

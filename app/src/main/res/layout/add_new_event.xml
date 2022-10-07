@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <TextView
+        android:id="@+id/nameTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        android:layout_marginStart="15dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:text="@string/name"/>
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/name_et"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintStart_toStartOf="@id/startTimeET"
+        app:layout_constraintTop_toTopOf="parent"/>
+
+    <com.google.android.material.divider.MaterialDivider
+        android:id="@+id/divider1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@id/name_et"/>
+
+    <LinearLayout
+        android:id="@+id/sunday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/monday_ll"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/sunday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/sunday"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/monday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toEndOf="@id/sunday_ll"
+        app:layout_constraintEnd_toStartOf="@id/tuesday_ll"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/monday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/monday"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/tuesday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toEndOf="@id/monday_ll"
+        app:layout_constraintEnd_toStartOf="@id/wednesday_ll"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/tuesday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tuesday"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/wednesday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toEndOf="@id/tuesday_ll"
+        app:layout_constraintEnd_toStartOf="@id/thursday_ll"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/wednesday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/wednesday"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/thursday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toEndOf="@id/wednesday_ll"
+        app:layout_constraintEnd_toStartOf="@id/friday_ll"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/thursday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/thursday"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/friday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toEndOf="@id/thursday_ll"
+        app:layout_constraintEnd_toStartOf="@id/saturday_ll"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/friday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/friday"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/saturday_ll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toBottomOf="@id/divider1"
+        app:layout_constraintStart_toEndOf="@id/friday_ll"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:gravity="center"
+        android:layout_marginTop="15dp">
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/saturday_cb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/saturday"/>
+    </LinearLayout>
+
+    <com.google.android.material.divider.MaterialDivider
+        android:id="@+id/divider2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        app:layout_constraintTop_toBottomOf="@id/sunday_ll"/>
+
+    <TextView
+        android:id="@+id/startTimeTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        android:layout_marginStart="15dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/divider2"
+        android:text="@string/start_time"/>
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/startTimeET"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="15dp"
+        android:inputType="time"
+        app:layout_constraintStart_toEndOf="@id/startTimeTV"
+        app:layout_constraintTop_toBottomOf="@id/divider2"/>
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/startTimeButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="15dp"
+        android:layout_marginTop="10dp"
+        app:layout_constraintStart_toEndOf="@id/startTimeET"
+        app:layout_constraintTop_toBottomOf="@id/divider2"
+        android:src="@drawable/baseline_watch_later_24"/>
+
+    <TextView
+        android:id="@+id/endTimeTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        android:layout_marginStart="15dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/startTimeET"
+        android:text="@string/end_time"/>
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/endTimeET"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:inputType="time"
+        app:layout_constraintStart_toStartOf="@id/startTimeET"
+        app:layout_constraintTop_toBottomOf="@id/startTimeET"/>
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/endTimeButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="15dp"
+        android:layout_marginTop="10dp"
+        app:layout_constraintStart_toEndOf="@id/endTimeET"
+        app:layout_constraintTop_toBottomOf="@id/startTimeET"
+        android:src="@drawable/baseline_watch_later_24"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

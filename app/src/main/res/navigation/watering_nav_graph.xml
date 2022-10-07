@@ -7,20 +7,9 @@
         android:id="@+id/homeFragment"
         android:name="com.lablabla.blablawatering.ui.fragment.HomeFragment"
         android:label="HomeFragment" >
-        <action
-            android:id="@+id/action_homeFragment_to_stationFragment"
-            app:destination="@id/stationFragment" />
     </fragment>
     <fragment
-        android:id="@+id/settingsFragment"
-        android:name="com.lablabla.blablawatering.ui.fragment.SettingsFragment"
-        android:label="SettingsFragment" />
-    <fragment
-        android:id="@+id/stationFragment"
-        android:name="com.lablabla.blablawatering.ui.fragment.StationFragment"
-        android:label="StationFragment" >
-<!--        <argument-->
-<!--            android:name="station"-->
-<!--            app:argType="com.lablabla.blablawatering.model.Station" />-->
-    </fragment>
+        android:id="@+id/eventsFragment"
+        android:name="com.lablabla.blablawatering.ui.fragment.EventsFragment"
+        android:label="EventsFragment" />
 </navigation>
