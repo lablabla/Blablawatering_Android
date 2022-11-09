@@ -3,13 +3,14 @@ package com.lablabla.blablawatering.ui.fragment
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.lablabla.blablawatering.R
 import com.lablabla.blablawatering.databinding.FragmentEventsBinding
 import com.lablabla.blablawatering.model.Event
 import com.lablabla.blablawatering.ui.adapter.EventAdapter
-import com.lablabla.blablawatering.ui.dialog.NewEventDialogFragment
+import com.lablabla.blablawatering.util.navigateSafe
 
 val EVENT_REQUEST_KEY = "event_request"
 val EVENT_BUNDLE_KEY = "event_bundle"
@@ -33,8 +34,7 @@ class EventsFragment : Fragment(R.layout.fragment_events) {
             }
         }
         binding.addEventFAB.setOnClickListener {
-            val newFragment = NewEventDialogFragment()
-            newFragment.show(childFragmentManager, "new event")
+            findNavController().navigateSafe(R.id.action_eventsFragment_to_newEventFragment)
         }
     }
 

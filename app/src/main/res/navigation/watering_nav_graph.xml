@@ -11,5 +11,14 @@
     <fragment
         android:id="@+id/eventsFragment"
         android:name="com.lablabla.blablawatering.ui.fragment.EventsFragment"
-        android:label="EventsFragment" />
+        android:label="EventsFragment" >
+        <action
+            android:id="@+id/action_eventsFragment_to_newEventFragment"
+            app:destination="@id/newEventFragment"
+            />
+    </fragment>
+    <fragment
+        android:id="@+id/newEventFragment"
+        android:name="com.lablabla.blablawatering.ui.dialog.NewEventFragment"
+        android:label="NewEventFragment" />
 </navigation>
