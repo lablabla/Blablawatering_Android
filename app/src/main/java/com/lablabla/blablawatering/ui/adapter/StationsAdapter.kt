@@ -7,17 +7,12 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.lablabla.blablawatering.databinding.StationsCardViewBinding
 import com.lablabla.blablawatering.model.Station
+import timber.log.Timber
 
 class StationsAdapter : RecyclerView.Adapter<StationsAdapter.StationViewHolder>() {
 
     inner class StationViewHolder(val binding: StationsCardViewBinding): RecyclerView.ViewHolder(binding.root) {
-        fun bind(station: Station) {
-            binding.stationsCVName.text = station.name
-            binding.stationsCVStatus.text = "Status: On"
-            onItemClickListener?.let {
-                it(station)
-            }
-        }
+
     }
     private val differCallback = object : DiffUtil.ItemCallback<Station>() {
         override fun areItemsTheSame(oldItem: Station, newItem: Station): Boolean {

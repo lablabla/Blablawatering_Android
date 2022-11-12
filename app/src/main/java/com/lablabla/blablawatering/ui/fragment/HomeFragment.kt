@@ -163,6 +163,9 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
 
     private fun setupRecyclerView() {
         stationsAdapter = StationsAdapter()
+        stationsAdapter.setOnItemClickListener {
+            btManager.setStationState(it, !it.is_on)
+        }
         binding.stationsRecyclerView.apply {
             adapter = stationsAdapter
             layoutManager = LinearLayoutManager(activity)
@@ -183,6 +186,19 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
         }
     }
 
+    override fun onStationStateNotification(stations: List<Station>) {
+        val list = stationsAdapter.differ.currentList.map { it.copy() }
+        list.forEach { current ->
+            stations.forEach StationsForEach@ { new ->
+                if (current.id == new.id) {
+                    current.is_on = new.is_on
+                    return@StationsForEach
+                }
+            }
+        }
+        onUpdateStations(list)
+    }
+
     override fun onUpdateStations(stations: List<Station>) {
         hideProgressIndicator()
         Timber.d("Updating to ${stations.size} stations")
@@ -199,5 +215,6 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
     override fun onDeviceDisconnected(name: String, address: String) {
         Timber.d("Disconnected from device $name at $address")
         updateUIDevice(false)
+        btManager.startScan()
     }
 }

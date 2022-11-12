@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.ParcelUuid
 import androidx.annotation.RequiresApi
 import com.google.gson.Gson
+import com.lablabla.blablawatering.model.SetStationStateMessage
 import com.lablabla.blablawatering.model.Station
 import com.lablabla.blablawatering.model.TimeMessage
 import com.lablabla.blablawatering.util.fromJson
@@ -22,6 +23,7 @@ import timber.log.Timber
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 private const val GATT_MAX_MTU_SIZE = 517
@@ -38,11 +40,14 @@ class BluetoothManager @Inject constructor(
     private lateinit var bluetoothDevice: BluetoothDevice
     private var pendingOperation: BleOperationType? = null
 
-    private val ADVERTISING_UUID = UUID.fromString("0000abcd-0000-1000-8000-00805f9b34fb")
+    private val SERVICE_UUID =                          UUID.fromString("0000abcd-6e32-4f94-adf6-b96ebda4c6ce")
 
-    private val SERVICE_UUID = UUID.fromString("260bb0ea-6e32-4f94-adf6-b96ebda4c6ce")
-    private val GET_STATIONS_UUID = UUID.fromString("1001b0ea-6e32-4f94-adf6-b96ebda4c6ce")
-    private val SET_TIME_UUID = UUID.fromString("1005b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val SET_STATION_STATE_UUID =                UUID.fromString("1000b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val GET_STATIONS_UUID =                     UUID.fromString("1001b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val NOTIFY_STATION_STATUS_CHANGED_UUID =    UUID.fromString("1003b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val SET_TIME_UUID =                         UUID.fromString("1005b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val REQUEST_NOTIFY_STATES_UUID =            UUID.fromString("1006b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+
 
     var btCallback: BlablaBTCallback? = null
     var connected: Boolean = false
@@ -68,7 +73,7 @@ class BluetoothManager @Inject constructor(
     }
 
     private val scanFilter = ScanFilter.Builder()
-        .setServiceUuid(ParcelUuid(ADVERTISING_UUID))
+        .setServiceUuid(ParcelUuid(SERVICE_UUID))
         .build()
 
     @RequiresApi(Build.VERSION_CODES.M)
@@ -95,12 +100,43 @@ class BluetoothManager @Inject constructor(
         }
     }
 
+    fun enableNotifications(characteristic: BluetoothGattCharacteristic) {
+        if (connected &&
+            (characteristic.isIndicatable() || characteristic.isNotifiable())
+        ) {
+            enqueueOperation(EnableNotifications(bluetoothDevice, characteristic.uuid))
+        } else if (!connected) {
+            Timber.e("Not connected to ${bluetoothDevice.address}, cannot enable notifications")
+        } else if (!characteristic.isIndicatable() && !characteristic.isNotifiable()) {
+            Timber.e("Characteristic ${characteristic.uuid} doesn't support notifications/indications")
+        }
+    }
+
+    fun disableNotifications(characteristic: BluetoothGattCharacteristic) {
+        if (connected &&
+            (characteristic.isIndicatable() || characteristic.isNotifiable())
+        ) {
+            enqueueOperation(DisableNotifications(bluetoothDevice, characteristic.uuid))
+        } else if (!connected) {
+            Timber.e("Not connected to ${bluetoothDevice.address}, cannot disable notifications")
+        } else if (!characteristic.isIndicatable() && !characteristic.isNotifiable()) {
+            Timber.e("Characteristic ${characteristic.uuid} doesn't support notifications/indications")
+        }
+    }
+
     fun requestMtuFromDevice(mtu: Int) {
         if (connected) {
             enqueueOperation(MtuRequest(bluetoothDevice, mtu.coerceIn(GATT_MIN_MTU_SIZE, GATT_MAX_MTU_SIZE)))
         } else {
             Timber.e("Not connected to ${bluetoothDevice.address}, cannot request MTU update!")
         }
+    }
+
+    fun enableNotificationsForStationChanged() {
+        bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(NOTIFY_STATION_STATUS_CHANGED_UUID)
+            ?.let { notificationChar ->
+                enableNotifications(notificationChar)
+            }
     }
 
     // Device scan callback.
@@ -142,7 +178,7 @@ class BluetoothManager @Inject constructor(
                 device.createBond()
             }
             else {
-                //updateTime()
+//                updateTime()
                 getStations()
             }
         }
@@ -163,13 +199,13 @@ class BluetoothManager @Inject constructor(
                     Timber.w("Successfully disconnected from $deviceAddress")
                     teardownConnection(gatt.device)
 
-                    connected = false
-                    btCallback?.onDeviceDisconnected(deviceName, deviceAddress)
-
                 }
             } else {
-                Timber.w("Error $status encountered for $deviceAddress! Disconnecting...")
-                gatt.close()
+                Timber.e("onConnectionStateChange: status $status encountered for $deviceAddress!")
+                if (pendingOperation is Connect) {
+                    signalEndOfOperation()
+                }
+                teardownConnection(gatt.device)
             }
         }
 
@@ -180,6 +216,7 @@ class BluetoothManager @Inject constructor(
                     printGattTable()
                     connected = true
                     requestMtuFromDevice(GATT_MAX_MTU_SIZE)
+                    enableNotificationsForStationChanged();
                     btCallback?.onDeviceConnected(gatt.device.name, gatt.device.address)
                 } else {
                     Timber.e("Service discovery failed due to status $status")
@@ -201,8 +238,20 @@ class BluetoothManager @Inject constructor(
             sync()
         }
 
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            with(characteristic) {
+                val utf8String = value.decodeToString()
+                Timber.i("Characteristic $uuid changed | value: $utf8String")
+                val stations: List<Station> = gson.fromJson(utf8String)
+                btCallback?.onStationStateNotification(stations)
+            }
+        }
+
         override fun onCharacteristicWrite(
-            gatt: BluetoothGatt?,
+            gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
             status: Int
         ) {
@@ -263,6 +312,86 @@ class BluetoothManager @Inject constructor(
 
             if (pendingOperation is CharacteristicRead) {
                 signalEndOfOperation()
+            }
+        }
+        override fun onDescriptorRead(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
+            with(descriptor) {
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        Timber.i("Read descriptor $uuid | value: ${value.toHexString()}")
+                    }
+                    BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
+                        Timber.e("Read not permitted for $uuid!")
+                    }
+                    else -> {
+                        Timber.e("Descriptor read failed for $uuid, error: $status")
+                    }
+                }
+            }
+
+            if (pendingOperation is DescriptorRead) {
+                signalEndOfOperation()
+            }
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
+            with(descriptor) {
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        Timber.i("Wrote to descriptor $uuid | value: ${value.toHexString()}")
+
+                        if (isCccd()) {
+                            onCccdWrite(gatt, value, characteristic)
+                        }
+                    }
+                    BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
+                        Timber.e("Write not permitted for $uuid!")
+                    }
+                    else -> {
+                        Timber.e("Descriptor write failed for $uuid, error: $status")
+                    }
+                }
+            }
+
+            if (descriptor.isCccd() &&
+                (pendingOperation is EnableNotifications || pendingOperation is DisableNotifications)
+            ) {
+                signalEndOfOperation()
+            } else if (!descriptor.isCccd() && pendingOperation is DescriptorWrite) {
+                signalEndOfOperation()
+            }
+        }
+
+        private fun onCccdWrite(
+            gatt: BluetoothGatt,
+            value: ByteArray,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            val charUuid = characteristic.uuid
+            val notificationsEnabled =
+                value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ||
+                        value.contentEquals(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+            val notificationsDisabled =
+                value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+
+            when {
+                notificationsEnabled -> {
+                    Timber.w("Notifications or indications ENABLED on $charUuid")
+                }
+                notificationsDisabled -> {
+                    Timber.w("Notifications or indications DISABLED on $charUuid")
+                }
+                else -> {
+                    Timber.e("Unexpected value ${value.toHexString()} on CCCD of $charUuid")
+                }
             }
         }
     }
@@ -336,9 +465,24 @@ class BluetoothManager @Inject constructor(
     private fun getStations() {
         Timber.d("getting stations")
         stationsString = ""
-        bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(GET_STATIONS_UUID)
+        val service = bluetoothGatt?.getService(SERVICE_UUID)
+        service?.getCharacteristic(GET_STATIONS_UUID)
             ?.let { getStationsChar ->
                 readCharacteristic(getStationsChar)
+            }
+        service?.getCharacteristic(REQUEST_NOTIFY_STATES_UUID)
+            ?.let { requestNotifyChar ->
+                writeCharacteristic(requestNotifyChar, byteArrayOf())
+            }
+    }
+
+    fun setStationState(station: Station, newState: Boolean) {
+        val stationStateMessage = SetStationStateMessage(station.id, newState)
+        val setStationStateChar = bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(SET_STATION_STATE_UUID)
+        if (setStationStateChar?.isWritable() == true) {
+            val jsonStr = gson.toJson(stationStateMessage)
+            Timber.d("setting station ${stationStateMessage.station_id} to ${stationStateMessage.is_on}")
+            sendToCharacteristic(setStationStateChar, jsonStr)
         }
     }
 
@@ -394,6 +538,9 @@ class BluetoothManager @Inject constructor(
         when (operation) {
             is Disconnect -> with(operation) {
                 Timber.w("Disconnecting from ${device.address}")
+
+                connected = false
+                btCallback?.onDeviceDisconnected(device.name, device.address)
                 gatt.close()
                 signalEndOfOperation()
             }
@@ -429,6 +576,57 @@ class BluetoothManager @Inject constructor(
                     gatt.readDescriptor(descriptor)
                 } ?: this@BluetoothManager.run {
                     Timber.e("Cannot find $descriptorUuid to read from")
+                    signalEndOfOperation()
+                }
+            }
+            is EnableNotifications -> with(operation) {
+                gatt.findCharacteristic(characteristicUuid)?.let { characteristic ->
+                    val cccdUuid = UUID.fromString(CCC_DESCRIPTOR_UUID)
+                    val payload = when {
+                        characteristic.isIndicatable() ->
+                            BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                        characteristic.isNotifiable() ->
+                            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        else ->
+                            error("${characteristic.uuid} doesn't support notifications/indications")
+                    }
+
+                    characteristic.getDescriptor(cccdUuid)?.let { cccDescriptor ->
+                        if (!gatt.setCharacteristicNotification(characteristic, true)) {
+                            Timber.e("setCharacteristicNotification failed for ${characteristic.uuid}")
+                            signalEndOfOperation()
+                            return
+                        }
+
+                        cccDescriptor.value = payload
+                        gatt.writeDescriptor(cccDescriptor)
+                    } ?: this@BluetoothManager.run {
+                        Timber.e("${characteristic.uuid} doesn't contain the CCC descriptor!")
+                        signalEndOfOperation()
+                    }
+                } ?: this@BluetoothManager.run {
+                    Timber.e("Cannot find $characteristicUuid! Failed to enable notifications.")
+                    signalEndOfOperation()
+                }
+            }
+            is DisableNotifications -> with(operation) {
+                gatt.findCharacteristic(characteristicUuid)?.let { characteristic ->
+                    val cccdUuid = UUID.fromString(CCC_DESCRIPTOR_UUID)
+                    characteristic.getDescriptor(cccdUuid)?.let { cccDescriptor ->
+                        if (!gatt.setCharacteristicNotification(characteristic, false)) {
+                            Timber.e("setCharacteristicNotification failed for ${characteristic.uuid}")
+                            signalEndOfOperation()
+                            return
+                        }
+
+                        cccDescriptor.value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+                        gatt.writeDescriptor(cccDescriptor)
+                    } ?: this@BluetoothManager.run {
+                        Timber.e("${characteristic.uuid} doesn't contain the CCC descriptor!")
+                        signalEndOfOperation()
+                    }
+                } ?: this@BluetoothManager.run {
+                    Timber.e("Cannot find $characteristicUuid! Failed to disable notifications.")
                     signalEndOfOperation()
                 }
             }
