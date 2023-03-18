@@ -1,32 +1,24 @@
 package com.lablabla.blablawatering.ui.fragment
 
-import android.Manifest
-import android.app.Activity
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
-import androidx.activity.result.ActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.lablabla.blablawatering.R
-import com.lablabla.blablawatering.bluetooth.BlablaBTCallback
+import com.lablabla.blablawatering.data.repository.Callbacks
 import com.lablabla.blablawatering.databinding.FragmentHomeBinding
+import com.lablabla.blablawatering.model.Event
 import com.lablabla.blablawatering.model.Station
 import com.lablabla.blablawatering.ui.adapter.StationsAdapter
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
-import java.io.BufferedReader
 import javax.inject.Inject
 
 
 @AndroidEntryPoint
-class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
+class HomeFragment : Fragment(R.layout.fragment_home), Callbacks {
 
     private lateinit var binding: FragmentHomeBinding
     private lateinit var stationsAdapter: StationsAdapter
@@ -37,90 +29,10 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
     @Inject
     lateinit var stations: List<Station>
 
-    val bluetoothAdapter: BluetoothAdapter by lazy {
-        val bluetoothManager = getSystemService(
-            requireActivity(),
-            BluetoothManager::class.java
-        ) as BluetoothManager
-        when {
-            ContextCompat.checkSelfPermission(
-                requireActivity(),
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED -> {
-            }
-//            shouldShowRequestPermissionRationale(...) -> {
-//            // In an educational UI, explain to the user why your app requires this
-//            // permission for a specific feature to behave as expected. In this UI,
-//            // include a "cancel" or "no thanks" button that allows the user to
-//            // continue using your app without granting the permission.
-//            showInContextUI(...)
-//        }
-            else -> {
-                // You can directly ask for the permission.
-                // The registered ActivityResultCallback gets the result of this request.
-                requestPermissionLauncher.launch(
-                    Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-        }
-        bluetoothManager.adapter
-    }
-
-    private var activityResultLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result: ActivityResult ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            Timber.e("On Activity Result OK")
-            // TODO: Check if it's ACTION_REQUEST_ENABLE and if so, update own BT manager
-        }
-    }
-
-    private val requestPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { isGranted: Boolean ->
-            if (isGranted) {
-                btManager.startScan()
-            } else {
-                // Explain to the user that the feature is unavailable because the
-                // features requires a permission that the user has denied. At the
-                // same time, respect the user's decision. Don't link to system
-                // settings in an effort to convince the user to change their
-                // decision.
-            }
-        }
-
-    private fun readAndSetTimezones() : Map<String, String> {
-        val timezonesInfo = mutableMapOf<String, String>()
-        requireActivity().assets
-            .open("zones.csv")
-            .bufferedReader()
-            .use(BufferedReader::readLines)
-            .forEach { s ->
-                s.split("\",\"")
-                    .also { p ->
-                        val id = p[0].replace("\"", "")
-                        val str = p[1].replace("\"", "")
-                        timezonesInfo[id] = str
-                    }
-            }
-        Timber.d("Parsed timezone file. Found ${timezonesInfo.size}")
-        return timezonesInfo
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val timezones = readAndSetTimezones()
-        btManager.btCallback = this
-        btManager.timezonesMap = timezones
-        if (!bluetoothAdapter.isEnabled) {
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            activityResultLauncher.launch(enableBtIntent);
-        }
-        else
-        {
-            btManager.bluetoothAdapter = bluetoothAdapter
-        }
+        btManager.callbacks = this
     }
 
     private fun showProgressIndicator() {
@@ -147,7 +59,9 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
 
         updateUIDevice(false)
         binding.syncButton.setOnClickListener {
+            showProgressIndicator()
             btManager.sync()
+            hideProgressIndicator()
         }
 
         if (btManager.connected) {
@@ -166,9 +80,15 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
         stationsAdapter.setOnItemClickListener {
             btManager.setStationState(it, !it.is_on)
         }
+        val defaultItemAnimator: DefaultItemAnimator = object : DefaultItemAnimator() {
+            override fun canReuseUpdatedViewHolder(viewHolder: RecyclerView.ViewHolder): Boolean {
+                return true
+            }
+        }
         binding.stationsRecyclerView.apply {
             adapter = stationsAdapter
             layoutManager = LinearLayoutManager(activity)
+            itemAnimator = defaultItemAnimator
         }
     }
 
@@ -205,6 +125,11 @@ class HomeFragment : Fragment(R.layout.fragment_home), BlablaBTCallback {
         activity?.runOnUiThread {
             stationsAdapter.differ.submitList(stations)
         }
+    }
+
+    override fun onUpdateEvents(events: List<Event>) {
+        hideProgressIndicator()
+        Timber.d("Updating to ${events.size} events")
     }
 
     override fun onDeviceConnected(name: String, address: String) {

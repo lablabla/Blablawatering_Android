@@ -35,16 +35,15 @@ class EventAdapter: RecyclerView.Adapter<EventAdapter.EventViewHolder>() {
     
     private val differCallback = object : DiffUtil.ItemCallback<Event>() {
         override fun areItemsTheSame(oldItem: Event, newItem: Event): Boolean {
-            return oldItem.name == newItem.name
+            return oldItem.id == newItem.id
         }
 
         override fun areContentsTheSame(oldItem: Event, newItem: Event): Boolean {
             return oldItem.name == newItem.name &&
-                    oldItem.days == newItem.days &&
-                    oldItem.startHours == newItem.startHours &&
-                    oldItem.startMinutes == newItem.startMinutes &&
-                    oldItem.endHours == newItem.endHours &&
-                    oldItem.endMinutes == newItem.endMinutes
+                    oldItem.id == newItem.id &&
+                    oldItem.cron_expr == newItem.cron_expr &&
+                    oldItem.duration == newItem.duration &&
+                    oldItem.station_ids == newItem.station_ids
         }
     }
 

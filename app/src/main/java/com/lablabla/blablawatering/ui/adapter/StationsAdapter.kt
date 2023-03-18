@@ -7,10 +7,11 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.lablabla.blablawatering.databinding.StationsCardViewBinding
 import com.lablabla.blablawatering.model.Station
-import timber.log.Timber
 
 class StationsAdapter : RecyclerView.Adapter<StationsAdapter.StationViewHolder>() {
-
+    init {
+        setHasStableIds(true)
+    }
     inner class StationViewHolder(val binding: StationsCardViewBinding): RecyclerView.ViewHolder(binding.root) {
 
     }
@@ -51,6 +52,11 @@ class StationsAdapter : RecyclerView.Adapter<StationsAdapter.StationViewHolder>(
                 it(station)
             }
         }
+    }
+
+    override fun getItemId(position: Int): Long {
+        val station = differ.currentList[position]
+        return station.id.toLong()
     }
 
     override fun getItemCount(): Int {

@@ -1,4 +1,4 @@
-package com.lablabla.blablawatering.model
+package com.lablabla.blablawatering.bluetooth.messages
 
 data class SetStationStateMessage(
     val station_id: Int,

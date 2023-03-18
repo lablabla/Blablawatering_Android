@@ -47,17 +47,15 @@ class NewEventFragment: Fragment(R.layout.add_new_event) {
         setupRecyclerView()
 
         binding.newEventSaveBtn.setOnClickListener {
-            setFragmentResult(EVENT_REQUEST_KEY, bundleOf(
-                EVENT_BUNDLE_KEY to Event(
-                    binding.nameEt.text.toString(),
-                    listOf(),
-                    getDaysFromCheckboxes(),
-                    1,
-                    2,
-                    3,
-                    4
-                )))
-            findNavController().navigateUp()
+            val navController = findNavController()
+            navController.previousBackStackEntry?.savedStateHandle?.set("new_event", Event(
+                0,
+                binding.nameEt.text.toString(),
+                listOf(),
+                "cron_expr",
+                1,
+            ))
+            navController.navigateUp()
         }
 
         binding.newEventCancelBtn.setOnClickListener {

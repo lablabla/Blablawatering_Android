@@ -1,13 +1,14 @@
-package com.lablabla.blablawatering.data.remote
+package com.lablabla.blablawatering.data.repository
 
 import com.lablabla.blablawatering.model.Event
 import com.lablabla.blablawatering.model.Station
 
-interface RemoteAPI {
+interface RepositoryAPI {
 
-    fun getStations() : List<Station>
+    // Actions
+    fun requestStations()
     fun setStations(stations : List<Station>)
 
-    fun getEvents() : List<Event>
+    fun requestEvents()
     fun setEvents(events : List<Event>)
 }

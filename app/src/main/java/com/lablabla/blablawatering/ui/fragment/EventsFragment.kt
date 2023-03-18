@@ -26,15 +26,14 @@ class EventsFragment : Fragment(R.layout.fragment_events) {
         binding = FragmentEventsBinding.bind(view)
         setupRecyclerView()
 
-        childFragmentManager.setFragmentResultListener(EVENT_REQUEST_KEY, this) { key, bundle ->
-            val event = bundle.getSerializable(EVENT_BUNDLE_KEY) as Event?
-            event?.let {
-                eventsList.add(it)
-                eventsAdapter.differ.submitList(eventsList.toMutableList())
-            }
+        val navController = findNavController()
+        navController.currentBackStackEntry?.savedStateHandle?.getLiveData<Event>("new_event")?.observe(
+            viewLifecycleOwner) { event ->
+            eventsList.add(event)
+            eventsAdapter.differ.submitList(eventsList.toMutableList())
         }
         binding.addEventFAB.setOnClickListener {
-            findNavController().navigateSafe(R.id.action_eventsFragment_to_newEventFragment)
+            navController.navigateSafe(R.id.action_eventsFragment_to_newEventFragment)
         }
     }
 
@@ -52,8 +51,8 @@ class EventsFragment : Fragment(R.layout.fragment_events) {
             )
         }
 
-        eventsList.add(Event("Event 1", listOf(), 32, 1, 2, 3, 4))
-        eventsList.add(Event("Event 2", listOf(),1, 2,3, 4, 5))
+//        eventsList.add(Event("Event 1", listOf(), 32, 1, 2, 3, 4))
+//        eventsList.add(Event("Event 2", listOf(),1, 2,3, 4, 5))
 
         eventsAdapter.differ.submitList(eventsList)
     }

@@ -1,4 +1,4 @@
-package com.lablabla.blablawatering.model
+package com.lablabla.blablawatering.bluetooth.messages
 
 data class TimeMessage(
     val tv_sec: Long,

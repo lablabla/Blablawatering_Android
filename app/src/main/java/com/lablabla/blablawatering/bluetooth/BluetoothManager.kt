@@ -13,17 +13,21 @@ import android.os.Looper
 import android.os.ParcelUuid
 import androidx.annotation.RequiresApi
 import com.google.gson.Gson
-import com.lablabla.blablawatering.model.SetStationStateMessage
+import com.lablabla.blablawatering.bluetooth.messages.MainMessage
+import com.lablabla.blablawatering.bluetooth.messages.MessageType
+import com.lablabla.blablawatering.bluetooth.messages.SetStationStateMessage
+import com.lablabla.blablawatering.bluetooth.messages.TimeMessage
+import com.lablabla.blablawatering.data.repository.Callbacks
+import com.lablabla.blablawatering.model.Event
 import com.lablabla.blablawatering.model.Station
-import com.lablabla.blablawatering.model.TimeMessage
 import com.lablabla.blablawatering.util.fromJson
 import com.lablabla.blablawatering.util.isReadable
 import com.lablabla.blablawatering.util.isWritable
 import timber.log.Timber
+import java.lang.Exception
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 private const val GATT_MAX_MTU_SIZE = 517
@@ -42,14 +46,13 @@ class BluetoothManager @Inject constructor(
 
     private val SERVICE_UUID =                          UUID.fromString("0000abcd-6e32-4f94-adf6-b96ebda4c6ce")
 
-    private val SET_STATION_STATE_UUID =                UUID.fromString("1000b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val SET_DATA_UUID =                         UUID.fromString("1000b0ea-6e32-4f94-adf6-b96ebda4c6ce")
     private val GET_STATIONS_UUID =                     UUID.fromString("1001b0ea-6e32-4f94-adf6-b96ebda4c6ce")
+    private val GET_EVENTS_UUID =                       UUID.fromString("1002b0ea-6e32-4f94-adf6-b96ebda4c6ce")
     private val NOTIFY_STATION_STATUS_CHANGED_UUID =    UUID.fromString("1003b0ea-6e32-4f94-adf6-b96ebda4c6ce")
-    private val SET_TIME_UUID =                         UUID.fromString("1005b0ea-6e32-4f94-adf6-b96ebda4c6ce")
-    private val REQUEST_NOTIFY_STATES_UUID =            UUID.fromString("1006b0ea-6e32-4f94-adf6-b96ebda4c6ce")
 
 
-    var btCallback: BlablaBTCallback? = null
+    var callbacks: Callbacks? = null
     var connected: Boolean = false
     var timezonesMap: Map<String, String>? = null
 
@@ -58,7 +61,8 @@ class BluetoothManager @Inject constructor(
 
     val gson = Gson()
 
-    private var stationsString: String = ""
+    private var stationsString = ""
+    private var eventsString = ""
 
     init {
         listenToBondStateChanges()
@@ -178,8 +182,9 @@ class BluetoothManager @Inject constructor(
                 device.createBond()
             }
             else {
-//                updateTime()
+                updateTime()
                 getStations()
+                getEvents()
             }
         }
     }
@@ -217,7 +222,7 @@ class BluetoothManager @Inject constructor(
                     connected = true
                     requestMtuFromDevice(GATT_MAX_MTU_SIZE)
                     enableNotificationsForStationChanged();
-                    btCallback?.onDeviceConnected(gatt.device.name, gatt.device.address)
+                    callbacks?.onDeviceConnected(gatt.device.name, gatt.device.address)
                 } else {
                     Timber.e("Service discovery failed due to status $status")
                     teardownConnection(gatt.device)
@@ -235,7 +240,6 @@ class BluetoothManager @Inject constructor(
                 signalEndOfOperation()
             }
             this@BluetoothManager.mtu = mtu
-            sync()
         }
 
         override fun onCharacteristicChanged(
@@ -246,7 +250,7 @@ class BluetoothManager @Inject constructor(
                 val utf8String = value.decodeToString()
                 Timber.i("Characteristic $uuid changed | value: $utf8String")
                 val stations: List<Station> = gson.fromJson(utf8String)
-                btCallback?.onStationStateNotification(stations)
+                callbacks?.onStationStateNotification(stations)
             }
         }
 
@@ -280,25 +284,46 @@ class BluetoothManager @Inject constructor(
             characteristic: BluetoothGattCharacteristic,
             status: Int
         ) {
+            Timber.i("Entering onCharacteristicRead")
             with(characteristic) {
                 when (status) {
                     BluetoothGatt.GATT_SUCCESS -> {
                         Timber.d("Read characteristic $uuid:\n${value.decodeToString()}")
+                        val utf8String = value.decodeToString()
+                        val isLastMessage = utf8String.endsWith("\n")
                         when (uuid) {
                             GET_STATIONS_UUID -> {
-                                val utf8String = value.decodeToString()
                                 stationsString += utf8String
-                                if (stationsString.endsWith("\n")) {
-                                    val stations: List<Station> = gson.fromJson(stationsString)
-                                    btCallback?.onUpdateStations(stations)
+                                if (isLastMessage) {
+                                    try {
+                                        val stations: List<Station> = gson.fromJson(stationsString)
+                                        callbacks?.onUpdateStations(stations)
+                                    }
+                                    catch (ex: Exception)
+                                    {
+                                        Timber.e(ex)
+                                    }
                                 }
-                                else {
-                                    readCharacteristic(this)
+                            }
+                            GET_EVENTS_UUID -> {
+                                eventsString += utf8String
+                                if (isLastMessage) {
+                                    try {
+                                        val events: List<Event> = gson.fromJson(eventsString)
+                                        callbacks?.onUpdateEvents(events)
+                                    }
+                                    catch (ex: Exception)
+                                    {
+                                        Timber.e(ex)
+                                    }
                                 }
                             }
                             else -> {
                                 Timber.e("Unknown UUID $uuid")
                             }
+                        }
+                        if (!isLastMessage) {
+                            readCharacteristic(this)
                         }
                     }
                     BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
@@ -453,36 +478,54 @@ class BluetoothManager @Inject constructor(
         val timeZone = timezonesMap?.get(calendar.timeZone.id) ?: ""
 
         val timeMessage = TimeMessage(ts, 0, timeZone)
-        val setTimeChar = bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(SET_TIME_UUID)
+        val setTimeChar = bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(SET_DATA_UUID)
         if (setTimeChar?.isWritable() == true) {
-            val timeStr = gson.toJson(timeMessage)
-            Timber.d("setting time to $timeStr")
-            sendToCharacteristic(setTimeChar, timeStr)
+            val dataStr = gson.toJson(timeMessage)
+            val message = MainMessage(MessageType.SET_TIME.ordinal, dataStr)
+            val jsonStr = gson.toJson(message)
+            Timber.d("setting time to $dataStr")
+            sendToCharacteristic(setTimeChar, jsonStr)
         }
 
     }
 
     private fun getStations() {
-        Timber.d("getting stations")
+        Timber.i("getting stations")
         stationsString = ""
-        val service = bluetoothGatt?.getService(SERVICE_UUID)
-        service?.getCharacteristic(GET_STATIONS_UUID)
+        bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(GET_STATIONS_UUID)
             ?.let { getStationsChar ->
                 readCharacteristic(getStationsChar)
             }
-        service?.getCharacteristic(REQUEST_NOTIFY_STATES_UUID)
-            ?.let { requestNotifyChar ->
-                writeCharacteristic(requestNotifyChar, byteArrayOf())
+        requestStationsState()
+    }
+
+    private fun getEvents() {
+        Timber.d("getting events")
+        eventsString = ""
+        bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(GET_EVENTS_UUID)
+            ?.let { getEventsChar ->
+                readCharacteristic(getEventsChar)
             }
+    }
+    
+    private fun requestStationsState() {
+        val setDataChar = bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(SET_DATA_UUID)
+        if (setDataChar?.isWritable() == true) {
+            val message = MainMessage(MessageType.REQUEST_NOTIFY.ordinal, "{}")
+            val jsonStr = gson.toJson(message)
+            sendToCharacteristic(setDataChar, jsonStr)
+        }
     }
 
     fun setStationState(station: Station, newState: Boolean) {
         val stationStateMessage = SetStationStateMessage(station.id, newState)
-        val setStationStateChar = bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(SET_STATION_STATE_UUID)
-        if (setStationStateChar?.isWritable() == true) {
-            val jsonStr = gson.toJson(stationStateMessage)
+        val setDataChar = bluetoothGatt?.getService(SERVICE_UUID)?.getCharacteristic(SET_DATA_UUID)
+        if (setDataChar?.isWritable() == true) {
+            val dataStr = gson.toJson(stationStateMessage)
+            val message = MainMessage(MessageType.SET_STATION_STATE.ordinal, dataStr)
+            val jsonStr = gson.toJson(message)
             Timber.d("setting station ${stationStateMessage.station_id} to ${stationStateMessage.is_on}")
-            sendToCharacteristic(setStationStateChar, jsonStr)
+            sendToCharacteristic(setDataChar, jsonStr)
         }
     }
 
@@ -540,7 +583,7 @@ class BluetoothManager @Inject constructor(
                 Timber.w("Disconnecting from ${device.address}")
 
                 connected = false
-                btCallback?.onDeviceDisconnected(device.name, device.address)
+                callbacks?.onDeviceDisconnected(device.name, device.address)
                 gatt.close()
                 signalEndOfOperation()
             }

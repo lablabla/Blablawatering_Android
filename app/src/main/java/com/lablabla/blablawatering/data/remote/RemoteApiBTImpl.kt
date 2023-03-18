@@ -1,13 +1,14 @@
 package com.lablabla.blablawatering.data.remote
 
 import com.lablabla.blablawatering.bluetooth.BluetoothManager
+import com.lablabla.blablawatering.data.repository.RepositoryAPI
 import com.lablabla.blablawatering.model.Event
 import com.lablabla.blablawatering.model.Station
 
-class RemoteApiIml(
+class RemoteApiBTImpl(
     private val bt: BluetoothManager
-) : RemoteAPI {
-    override fun getStations(): List<Station> {
+) : RepositoryAPI {
+    override fun requestStations() {
         TODO("Not yet implemented")
     }
 
@@ -15,12 +16,11 @@ class RemoteApiIml(
         TODO("Not yet implemented")
     }
 
-    override fun getEvents(): List<Event> {
+    override fun requestEvents() {
         TODO("Not yet implemented")
     }
 
     override fun setEvents(events: List<Event>) {
         TODO("Not yet implemented")
     }
-
 }
